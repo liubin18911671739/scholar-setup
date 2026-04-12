@@ -30,8 +30,9 @@ section "阶段 1：系统基础工具"
 log "安装系统依赖..."
 apt-get update -qq
 apt-get install -y -qq tmux vim net-tools curl wget git zstd jq build-essential libffi-dev libssl-dev > /dev/null 2>&1
-# 自动检测 Python 版本并安装对应 venv 包
 apt-get install -y -qq software-properties-common > /dev/null 2>&1
+# Install Python 3.12 venv package (required for venv creation)
+apt-get install -y -qq python3.12-venv python3.12-dev 2>/dev/null || true
 git config --global user.name "liubin18911671739"
 git config --global user.email "18911671739@126.com"
 ok "系统工具 + Git 已配置"
@@ -40,7 +41,11 @@ ok "系统工具 + Git 已配置"
 #=============================================================================
 section "阶段 2：Python 虚拟环境（科研全栈）"
 #=============================================================================
-[ ! -f $WORK/venv/bin/python ] && python3.12 -m venv $WORK/venv
+# Recreate venv if broken (activate missing)
+if [ ! -f "$WORK/venv/bin/activate" ]; then
+    rm -rf "$WORK/venv"
+    python3.12 -m venv "$WORK/venv"
+fi
 source $WORK/venv/bin/activate
 python -m ensurepip --upgrade 2>/dev/null || true
 pip install --upgrade pip setuptools wheel -q
@@ -66,6 +71,7 @@ python -m ipykernel install --user --name scholar --display-name "Python (schola
 grep -q 'source $WORK/venv/bin/activate' ~/.bashrc 2>/dev/null || \
     echo "source $WORK/venv/bin/activate" >> ~/.bashrc
 [ "$(which python)" = "$WORK/venv/bin/python" ] && ok "Python 3.12 venv（科研全栈）" || fail "venv 异常"
+
 #=============================================================================
 section "阶段 3：Node.js 环境（nvm + Node 24 LTS）"
 #=============================================================================
