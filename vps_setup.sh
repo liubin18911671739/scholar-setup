@@ -200,14 +200,14 @@ command -v code-server &>/dev/null || curl -fsSL https://code-server.dev/install
 command -v code-server &>/dev/null && ok "code-server" || fail "code-server"
 mkdir -p $WORK/code-server/{data,extensions,config} ~/.config/code-server
 [ ! -f $WORK/code-server/config/config.yaml ] && cat > $WORK/code-server/config/config.yaml << 'CSEOF'
-bind-addr: 0.0.0.0:8082
+bind-addr: 0.0.0.0:8081
 auth: password
 password: pzNPIjcC71MmLTLPA0vM2JjL
 cert: false
 CSEOF
 ln -sf $WORK/code-server/config/config.yaml ~/.config/code-server/config.yaml
-pgrep -f "code-server" > /dev/null || nohup code-server --user-data-dir $WORK/code-server/data --extensions-dir $WORK/code-server/extensions --bind-addr 0.0.0.0:8082 &> $WORK/logs/code-server.log &
-sleep 3; netstat -tlnp | grep -q ":8082 " && ok "code-server :8082" || warn "code-server 未启动"
+pgrep -f "code-server" > /dev/null || nohup code-server --user-data-dir $WORK/code-server/data --extensions-dir $WORK/code-server/extensions --bind-addr 0.0.0.0:8081 &> $WORK/logs/code-server.log &
+sleep 3; netstat -tlnp | grep -q ":8081 " && ok "code-server :8081" || warn "code-server 未启动"
 
 export PATH="/usr/local/lib/nodejs/bin:$PATH"
 if command -v npm &>/dev/null; then
@@ -394,8 +394,8 @@ pgrep -f "minio server" > /dev/null || {
 }
 
 pgrep -f "code-server" > /dev/null || {
-    nohup code-server --user-data-dir /workspace/code-server/data --extensions-dir /workspace/code-server/extensions --bind-addr 0.0.0.0:8082 &> /workspace/logs/code-server.log &
-    echo "  ✅ code-server :8082"
+    nohup code-server --user-data-dir /workspace/code-server/data --extensions-dir /workspace/code-server/extensions --bind-addr 0.0.0.0:8081 &> /workspace/logs/code-server.log &
+    echo "  ✅ code-server :8081"
 }
 
 pgrep -f "jupyter-lab" > /dev/null || {
@@ -436,7 +436,7 @@ pgrep -f "open-webui serve" > /dev/null || {
 
 echo ""
 echo "✅ 所有服务启动完成！"
-echo "  💻 code-server → :8082"
+echo "  💻 code-server → :8081"
 echo "  📓 JupyterLab  → :8888"
 echo "  🧪 Marimo      → :2718"
 echo "  ⚙️ n8n        → :5678"
@@ -459,7 +459,7 @@ echo "Python: $(python --version 2>&1)"
 echo "Node:   $(node --version 2>&1)"
 echo ""
 echo "服务端口："
-for port in 2718 3000 5432 5678 6379 8082 8888 9000 9001 18789; do
+for port in 2718 3000 5432 5678 6379 8081 8888 9000 9001 18789; do
     netstat -tlnp 2>/dev/null | grep -q ":$port " && echo "  ✅ :$port" || echo "  ❌ :$port"
 done
 CHECKEOF
@@ -473,7 +473,7 @@ check() { eval "$2" > /dev/null 2>&1 && ok "$1" || fail "$1"; }
 check "Python venv" '[ "$(which python)" = "/workspace/venv/bin/python" ]'
 check "Node.js" 'command -v node'
 check "code-server" 'command -v code-server'
-check "code-server :8082" 'netstat -tlnp | grep -q ":8082 "'
+check "code-server :8081" 'netstat -tlnp | grep -q ":8081 "'
 check "Claude Code" 'command -v claude'
 check "OpenClaw" 'command -v openclaw'
 check "OpenClaw :18789" 'netstat -tlnp | grep -q ":18789 "'
