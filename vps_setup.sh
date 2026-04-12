@@ -25,6 +25,24 @@ section() { echo -e "\n${PURPLE}════════════════
 mkdir -p $WORK/logs
 
 #=============================================================================
+section "环境变量检查"
+#=============================================================================
+# 所有密码/密钥从 Docker Environment Variables 读取，不硬编码在脚本中
+log "检查必需环境变量..."
+: "${SCHOLAR_PASSWORD:?❌ 请在 Docker Environment Variables 中设置 SCHOLAR_PASSWORD}"
+: "${CODE_SERVER_PASSWORD:?❌ 请设置 CODE_SERVER_PASSWORD}"
+: "${ZHIPU_API_KEY:?❌ 请设置 ZHIPU_API_KEY}"
+MINIO_ROOT_USER="${MINIO_ROOT_USER:-minioadmin}"
+MINIO_ROOT_PASSWORD="${MINIO_ROOT_PASSWORD:-$SCHOLAR_PASSWORD}"
+TELEGRAM_BOT_TOKEN="${TELEGRAM_BOT_TOKEN:-}"
+TELEGRAM_CHAT_ID="${TELEGRAM_CHAT_ID:-}"
+FEISHU_WEBHOOK_URL="${FEISHU_WEBHOOK_URL:-}"
+FEISHU_APP_ID="${FEISHU_APP_ID:-}"
+FEISHU_APP_SECRET="${FEISHU_APP_SECRET:-}"
+export ZHIPU_API_KEY MINIO_ROOT_USER MINIO_ROOT_PASSWORD
+ok "环境变量已加载（密码来自 Docker Environment Variables）"
+
+#=============================================================================
 section "阶段 1：系统基础工具"
 #=============================================================================
 log "安装系统依赖..."
@@ -137,7 +155,7 @@ su - postgres -c "psql -tc \"SELECT 1 FROM pg_database WHERE datname='scholar'\"
 su - postgres -c "psql -d scholar -c 'CREATE EXTENSION IF NOT EXISTS vector'" 2>/dev/null || true
 
 # Set password for postgres user
-su - postgres -c "psql -c \"ALTER USER postgres PASSWORD 'scholar2026'\"" 2>/dev/null || true
+su - postgres -c "psql -c \"ALTER USER postgres PASSWORD '$SCHOLAR_PASSWORD'\"" 2>/dev/null || true
 
 netstat -tlnp | grep -q ":5432 " && ok "PostgreSQL :5432" || warn "PostgreSQL not started"
 
@@ -156,7 +174,7 @@ if ! pgrep -f "redis-server" > /dev/null; then
     redis-server --daemonize yes \
         --dir "$REDIS_DIR" \
         --bind 0.0.0.0 \
-        --requirepass scholar2026 \
+        --requirepass $SCHOLAR_PASSWORD \
         --logfile $WORK/logs/redis.log \
         --save 60 1000 2>/dev/null || true
 fi
@@ -179,8 +197,7 @@ fi
 
 MINIO_DATA=$WORK/minio_data
 mkdir -p "$MINIO_DATA"
-export MINIO_ROOT_USER=minioadmin
-export MINIO_ROOT_PASSWORD=scholar2026
+# MINIO_ROOT_USER and MINIO_ROOT_PASSWORD already set from Docker env vars
 
 if ! pgrep -f "minio server" > /dev/null; then
     nohup minio server "$MINIO_DATA" \
@@ -212,7 +229,7 @@ fi
 command -v pgweb &>/dev/null && ok "pgweb" || warn "pgweb install failed"
 
 pgrep -f "pgweb" > /dev/null || {
-    nohup pgweb --bind=0.0.0.0 --listen=5050 --url="postgres://postgres:scholar2026@localhost:5432/scholar?sslmode=disable" &> $WORK/logs/pgweb.log &
+    nohup pgweb --bind=0.0.0.0 --listen=5050 --url="postgres://postgres:$SCHOLAR_PASSWORD@localhost:5432/scholar?sslmode=disable" &> $WORK/logs/pgweb.log &
     sleep 2
 }
 netstat -tlnp | grep -q ":5050 " && ok "pgweb :5050" || warn "pgweb not started"
@@ -224,10 +241,10 @@ log "安装 code-server + Claude Code..."
 command -v code-server &>/dev/null || curl -fsSL https://code-server.dev/install.sh | sh 2>/dev/null
 command -v code-server &>/dev/null && ok "code-server" || fail "code-server"
 mkdir -p $WORK/code-server/{data,extensions,config} ~/.config/code-server
-[ ! -f $WORK/code-server/config/config.yaml ] && cat > $WORK/code-server/config/config.yaml << 'CSEOF'
+[ ! -f $WORK/code-server/config/config.yaml ] && cat > $WORK/code-server/config/config.yaml << CSEOF
 bind-addr: 0.0.0.0:8081
 auth: password
-password: pzNPIjcC71MmLTLPA0vM2JjL
+password: $CODE_SERVER_PASSWORD
 cert: false
 CSEOF
 ln -sf $WORK/code-server/config/config.yaml ~/.config/code-server/config.yaml
@@ -244,8 +261,8 @@ else
     warn "Claude Code install failed (npm not available?)"
 fi
 mkdir -p ~/.claude
-[ ! -f ~/.claude/settings.json ] && cat > ~/.claude/settings.json << 'CLEOF'
-{"env":{"ANTHROPIC_AUTH_TOKEN":"b5f287759e514e9da848105c36829804.26vrGpn1oeXnWWdj","ANTHROPIC_BASE_URL":"https://open.bigmodel.cn/api/anthropic","API_TIMEOUT_MS":"3000000","ANTHROPIC_DEFAULT_HAIKU_MODEL":"glm-4.5-air","ANTHROPIC_DEFAULT_SONNET_MODEL":"zai/glm-5.1","ANTHROPIC_DEFAULT_OPUS_MODEL":"glm-5.1","CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC":1}}
+[ ! -f ~/.claude/settings.json ] && cat > ~/.claude/settings.json << CLEOF
+{"env":{"ANTHROPIC_AUTH_TOKEN":"$ZHIPU_API_KEY","ANTHROPIC_BASE_URL":"https://open.bigmodel.cn/api/anthropic","API_TIMEOUT_MS":"3000000","ANTHROPIC_DEFAULT_HAIKU_MODEL":"glm-4.5-air","ANTHROPIC_DEFAULT_SONNET_MODEL":"zai/glm-5.1","ANTHROPIC_DEFAULT_OPUS_MODEL":"glm-5.1","CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC":1}}
 CLEOF
 echo '{"hasCompletedOnboarding":true}' > ~/.claude.json
 
@@ -256,8 +273,8 @@ log "安装 OpenClaw 智能体..."
 
 rm -f ~/.openclaw 2>/dev/null || true
 mkdir -p $WORK/.openclaw
-export ZHIPU_API_KEY="b5f287759e514e9da848105c36829804.26vrGpn1oeXnWWdj"
-grep -q 'ZHIPU_API_KEY' ~/.bashrc 2>/dev/null || echo 'export ZHIPU_API_KEY="b5f287759e514e9da848105c36829804.26vrGpn1oeXnWWdj"' >> ~/.bashrc
+# ZHIPU_API_KEY already exported from env var defaults
+grep -q 'ZHIPU_API_KEY' ~/.bashrc 2>/dev/null || echo 'export ZHIPU_API_KEY="'"$ZHIPU_API_KEY"'"' >> ~/.bashrc
 if ! command -v openclaw &>/dev/null; then
     npm install -g openclaw@latest 2>&1 | tail -5 || true
 fi
@@ -298,12 +315,12 @@ section "阶段 7：Telegram + 飞书通知"
 #=============================================================================
 log "安装 Telegram + 飞书通知..."
 if [ ! -f $WORK/.env ]; then
-    cat > $WORK/.env << 'ENVEOF'
-TELEGRAM_BOT_TOKEN=8777940422:AAFP0Jzw-0jnsbWzhD2Y4GN9A3w59o_CEj8
-TELEGRAM_CHAT_ID=7249863310
-FEISHU_WEBHOOK_URL=https://open.feishu.cn/open-apis/bot/v2/hook/t6qIprRGi1qoBDkLmQ8ORfcrRTamOIEF
-FEISHU_APP_ID=cli_a92566fb31a5dcca
-FEISHU_APP_SECRET=TnSUBhKkxVhcjAYZpW7cmhYNmSs5qAhk
+    cat > $WORK/.env << ENVEOF
+TELEGRAM_BOT_TOKEN=$TELEGRAM_BOT_TOKEN
+TELEGRAM_CHAT_ID=$TELEGRAM_CHAT_ID
+FEISHU_WEBHOOK_URL=$FEISHU_WEBHOOK_URL
+FEISHU_APP_ID=$FEISHU_APP_ID
+FEISHU_APP_SECRET=$FEISHU_APP_SECRET
 ENVEOF
     ok ".env 已创建"
 else
@@ -317,14 +334,14 @@ log "安装 JupyterLab..."
 
 source $WORK/venv/bin/activate
 mkdir -p $WORK/jupyter/config
-[ ! -f $WORK/jupyter/config/jupyter_lab_config.py ] && cat > $WORK/jupyter/config/jupyter_lab_config.py << 'JUPEOF'
+[ ! -f $WORK/jupyter/config/jupyter_lab_config.py ] && cat > $WORK/jupyter/config/jupyter_lab_config.py << JUPEOF
 c = get_config()
 c.ServerApp.ip = '0.0.0.0'
 c.ServerApp.port = 8888
 c.ServerApp.open_browser = False
 c.ServerApp.root_dir = '/workspace'
 c.ServerApp.allow_root = True
-c.ServerApp.token = 'scholar2026'
+c.ServerApp.token = '$SCHOLAR_PASSWORD'
 c.ServerApp.allow_origin = '*'
 c.ServerApp.disable_check_xsrf = True
 JUPEOF
@@ -373,7 +390,7 @@ pip install open-webui -q 2>&1 | tail -5 || true
 
 # Configure Open WebUI to use Zhipu GLM API (OpenAI-compatible)
 export OPENAI_API_BASE_URL="https://open.bigmodel.cn/api/paas/v4"
-export OPENAI_API_KEY="b5f287759e514e9da848105c36829804.26vrGpn1oeXnWWdj"
+export OPENAI_API_KEY="$ZHIPU_API_KEY"
 export WEBUI_AUTH=false
 export DATA_DIR="$WORK/open-webui-data"
 mkdir -p "$DATA_DIR"
@@ -410,12 +427,12 @@ su - postgres -c "/usr/lib/postgresql/*/bin/pg_ctl -D /workspace/pgdata -l /work
 echo "  ✅ PostgreSQL :5432"
 
 pgrep -f "redis-server" > /dev/null || {
-    redis-server --daemonize yes --dir /workspace/redis_data --bind 0.0.0.0 --requirepass scholar2026 --logfile /workspace/logs/redis.log --save 60 1000 2>/dev/null || true
+    redis-server --daemonize yes --dir /workspace/redis_data --bind 0.0.0.0 --requirepass $SCHOLAR_PASSWORD --logfile /workspace/logs/redis.log --save 60 1000 2>/dev/null || true
     echo "  ✅ Redis :6379"
 }
 
 pgrep -f "minio server" > /dev/null || {
-    export MINIO_ROOT_USER=minioadmin MINIO_ROOT_PASSWORD=scholar2026
+    # MINIO_ROOT_USER / MINIO_ROOT_PASSWORD from Docker env vars
     nohup minio server /workspace/minio_data --address ":9000" --console-address ":9001" &> /workspace/logs/minio.log &
     echo "  ✅ MinIO :9000/:9001"
 }
@@ -453,7 +470,7 @@ pgrep -f "openclaw" > /dev/null || {
 pgrep -f "open-webui serve" > /dev/null || {
     if command -v open-webui &>/dev/null; then
         export OPENAI_API_BASE_URL="https://open.bigmodel.cn/api/paas/v4"
-        export OPENAI_API_KEY="b5f287759e514e9da848105c36829804.26vrGpn1oeXnWWdj"
+        export OPENAI_API_KEY="$ZHIPU_API_KEY"
         export WEBUI_AUTH=false
         export DATA_DIR=/workspace/open-webui-data
         nohup open-webui serve --host 0.0.0.0 --port 3000 &> /workspace/logs/open-webui.log &
@@ -463,7 +480,7 @@ pgrep -f "open-webui serve" > /dev/null || {
 
 pgrep -f "pgweb" > /dev/null || {
     if command -v pgweb &>/dev/null; then
-        nohup pgweb --bind=0.0.0.0 --listen=5050 --url="postgres://postgres:scholar2026@localhost:5432/scholar?sslmode=disable" &> /workspace/logs/pgweb.log &
+        nohup pgweb --bind=0.0.0.0 --listen=5050 --url="postgres://postgres:$SCHOLAR_PASSWORD@localhost:5432/scholar?sslmode=disable" &> /workspace/logs/pgweb.log &
         echo "  ✅ pgweb :5050"
     fi
 }
