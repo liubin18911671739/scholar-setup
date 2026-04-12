@@ -66,7 +66,6 @@ python -m ipykernel install --user --name scholar --display-name "Python (schola
 grep -q 'source $WORK/venv/bin/activate' ~/.bashrc 2>/dev/null || \
     echo "source $WORK/venv/bin/activate" >> ~/.bashrc
 [ "$(which python)" = "$WORK/venv/bin/python" ] && ok "Python 3.12 venv（科研全栈）" || fail "venv 异常"
-
 #=============================================================================
 section "阶段 3：Node.js 环境（nvm + Node 24 LTS）"
 #=============================================================================
