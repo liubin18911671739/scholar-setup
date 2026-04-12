@@ -193,6 +193,31 @@ netstat -tlnp | grep -q ":9000 " && ok "MinIO API :9000" || warn "MinIO not star
 netstat -tlnp | grep -q ":9001 " && ok "MinIO Console :9001" || warn "MinIO Console not started"
 
 #=============================================================================
+section "阶段 4.3：pgweb（PostgreSQL Web 管理）"
+#=============================================================================
+log "安装 pgweb..."
+if ! command -v pgweb &>/dev/null; then
+    ARCH=$(uname -m)
+    case "$ARCH" in
+        x86_64|amd64) PW_ARCH="amd64" ;;
+        aarch64|arm64) PW_ARCH="arm64" ;;
+        *) PW_ARCH="amd64" ;;
+    esac
+    apt-get install -y -qq unzip > /dev/null 2>&1
+    curl -fsSL "https://github.com/sosedoff/pgweb/releases/latest/download/pgweb_linux_${PW_ARCH}.zip" -o /tmp/pgweb.zip || true
+    unzip -o /tmp/pgweb.zip -d /usr/local/bin/ 2>/dev/null && rm -f /tmp/pgweb.zip
+    mv -f /usr/local/bin/pgweb_linux_${PW_ARCH} /usr/local/bin/pgweb 2>/dev/null || true
+    chmod +x /usr/local/bin/pgweb 2>/dev/null || true
+fi
+command -v pgweb &>/dev/null && ok "pgweb" || warn "pgweb install failed"
+
+pgrep -f "pgweb" > /dev/null || {
+    nohup pgweb --bind=0.0.0.0 --listen=5050 --url="postgres://postgres:scholar2026@localhost:5432/scholar?sslmode=disable" &> $WORK/logs/pgweb.log &
+    sleep 2
+}
+netstat -tlnp | grep -q ":5050 " && ok "pgweb :5050" || warn "pgweb not started"
+
+#=============================================================================
 section "阶段 5：code-server + Claude Code"
 #=============================================================================
 log "安装 code-server + Claude Code..."
@@ -300,6 +325,8 @@ c.ServerApp.open_browser = False
 c.ServerApp.root_dir = '/workspace'
 c.ServerApp.allow_root = True
 c.ServerApp.token = 'scholar2026'
+c.ServerApp.allow_origin = '*'
+c.ServerApp.disable_check_xsrf = True
 JUPEOF
 pgrep -f "jupyter-lab" > /dev/null || nohup jupyter lab --config $WORK/jupyter/config/jupyter_lab_config.py &> $WORK/logs/jupyter.log &
 sleep 3; netstat -tlnp | grep -q ":8888 " && ok "JupyterLab :8888" || warn "JupyterLab 未启动"
@@ -434,6 +461,13 @@ pgrep -f "open-webui serve" > /dev/null || {
     fi
 }
 
+pgrep -f "pgweb" > /dev/null || {
+    if command -v pgweb &>/dev/null; then
+        nohup pgweb --bind=0.0.0.0 --listen=5050 --url="postgres://postgres:scholar2026@localhost:5432/scholar?sslmode=disable" &> /workspace/logs/pgweb.log &
+        echo "  ✅ pgweb :5050"
+    fi
+}
+
 echo ""
 echo "✅ 所有服务启动完成！"
 echo "  💻 code-server → :8081"
@@ -459,7 +493,7 @@ echo "Python: $(python --version 2>&1)"
 echo "Node:   $(node --version 2>&1)"
 echo ""
 echo "服务端口："
-for port in 2718 3000 5432 5678 6379 8081 8888 9000 9001 18789; do
+for port in 2718 3000 5050 5432 5678 6379 8081 8888 9000 9001 18789; do
     netstat -tlnp 2>/dev/null | grep -q ":$port " && echo "  ✅ :$port" || echo "  ❌ :$port"
 done
 CHECKEOF
@@ -484,6 +518,7 @@ check "PostgreSQL :5432" 'netstat -tlnp | grep -q ":5432 "'
 check "Redis :6379" 'netstat -tlnp | grep -q ":6379 "'
 check "MinIO :9000" 'netstat -tlnp | grep -q ":9000 "'
 check "Open WebUI :3000" 'netstat -tlnp | grep -q ":3000 "'
+check "pgweb :5050" 'netstat -tlnp | grep -q ":5050 "'
 check ".env 文件" '[ -f /workspace/.env ]'
 
 #=============================================================================
