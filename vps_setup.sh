@@ -47,7 +47,7 @@ section "阶段 1：系统基础工具"
 #=============================================================================
 log "安装系统依赖..."
 apt-get update -qq
-apt-get install -y -qq tmux vim net-tools curl wget git zstd jq build-essential libffi-dev libssl-dev > /dev/null 2>&1
+apt-get install -y -qq ssh-server ssh-client nano iproute2 htop tmux vim net-tools curl wget git zstd jq build-essential libffi-dev libssl-dev > /dev/null 2>&1
 apt-get install -y -qq software-properties-common > /dev/null 2>&1
 # Install Python 3.12 venv package (required for venv creation)
 apt-get install -y -qq python3.12-venv python3.12-dev 2>/dev/null || true
