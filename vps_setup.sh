@@ -47,13 +47,25 @@ section "阶段 1：系统基础工具"
 #=============================================================================
 log "安装系统依赖..."
 apt-get update -qq
-apt-get install -y -qq ssh-server ssh-client nano iproute2 htop tmux vim net-tools curl wget git zstd jq build-essential libffi-dev libssl-dev > /dev/null 2>&1
+apt-get install -y -qq htop tmux vim net-tools curl wget git zstd jq build-essential libffi-dev libssl-dev openssh-server > /dev/null 2>&1
 apt-get install -y -qq software-properties-common > /dev/null 2>&1
 # Install Python 3.12 venv package (required for venv creation)
 apt-get install -y -qq python3.12-venv python3.12-dev 2>/dev/null || true
 git config --global user.name "liubin18911671739"
 git config --global user.email "18911671739@126.com"
 ok "系统工具 + Git 已配置"
+
+# SSH root password login
+if [ -n "${ROOT_PASSWORD:-}" ]; then
+    echo "root:$ROOT_PASSWORD" | chpasswd
+    mkdir -p /var/run/sshd
+    sed -i 's/^#\?PermitRootLogin.*/PermitRootLogin yes/' /etc/ssh/sshd_config
+    sed -i 's/^#\?PasswordAuthentication.*/PasswordAuthentication yes/' /etc/ssh/sshd_config
+    /usr/sbin/sshd 2>/dev/null || true
+    ok "SSH :22 (root password login enabled)"
+else
+    warn "ROOT_PASSWORD not set, SSH skipped"
+fi
 
 
 #=============================================================================
